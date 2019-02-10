@@ -2,19 +2,50 @@ const fs = require('fs');
 const readline = require('readline');
 const {google} = require('googleapis');
 
+var oAuth2Client;
+
+//todo 
+// 1. add new users to a list
+// 2. unfollow people who are NOT in certain lists
+// 3. only follow people who you haven't followed before. 
+
+
 // If modifying these scopes, delete token.json.
-const SCOPES = ['https://www.googleapis.com/auth/spreadsheets.readonly'];
+const SCOPES = ['https://www.googleapis.com/auth/spreadsheets'];
 // The file token.json stores the user's access and refresh tokens, and is
 // created automatically when the authorization flow completes for the first
 // time.
 const TOKEN_PATH = 'token.json';
 
+// var sheets;
+
+function getDateTime() {
+
+    var date = new Date();
+
+    var hour = date.getHours();
+    hour = (hour < 10 ? "0" : "") + hour;
+
+    var year = date.getFullYear();
+
+    var month = date.getMonth() + 1;
+    month = (month < 10 ? "0" : "") + month;
+
+    var day  = date.getDate();
+    day = (day < 10 ? "0" : "") + day;
+
+    return year + ":" + month + ":" + day + ":" + hour;
+
+}
+
 // Load client secrets from a local file.
 fs.readFile('credentials.json', (err, content) => {
-  if (err) return console.log('Error loading client secret file:', err);
-  // Authorize a client with credentials, then call the Google Sheets API.
-  authorize(JSON.parse(content), listMajors);
+    if (err) return console.log('Error loading client secret file:', err);
+    // Authorize a client with credentials, then call the Google Sheets API.
+    authorize(JSON.parse(content));//, listMajors);
+    
 });
+
 
 /**
  * Create an OAuth2 client with the given credentials, and then execute the
@@ -22,26 +53,27 @@ fs.readFile('credentials.json', (err, content) => {
  * @param {Object} credentials The authorization client credentials.
  * @param {function} callback The callback to call with the authorized client.
  */
-function authorize(credentials, callback) {
+function authorize(credentials) { //}, callback) {
   const {client_secret, client_id, redirect_uris} = credentials.installed;
-  const oAuth2Client = new google.auth.OAuth2(
-      client_id, client_secret, redirect_uris[0]);
+  oAuth2Client = new google.auth.OAuth2(
+    client_id, client_secret, redirect_uris[0]);
+   
+    // getNewToken(oAuth2Client);
 
-  // Check if we have previously stored a token.
+//   Check if we have previously stored a token.
   fs.readFile(TOKEN_PATH, (err, token) => {
-    if (err) return getNewToken(oAuth2Client, callback);
+    if (err) return getNewToken(oAuth2Client);//, callback);
     oAuth2Client.setCredentials(JSON.parse(token));
-    callback(oAuth2Client);
+    //callback(oAuth2Client);
   });
 }
-
 /**
  * Get and store new token after prompting for user authorization, and then
  * execute the given callback with the authorized OAuth2 client.
  * @param {google.auth.OAuth2} oAuth2Client The OAuth2 client to get token for.
  * @param {getEventsCallback} callback The callback for the authorized client.
  */
-function getNewToken(oAuth2Client, callback) {
+function getNewToken(oAuth2Client) {//}, callback) {
   const authUrl = oAuth2Client.generateAuthUrl({
     access_type: 'offline',
     scope: SCOPES,
@@ -61,7 +93,7 @@ function getNewToken(oAuth2Client, callback) {
         if (err) console.error(err);
         console.log('Token stored to', TOKEN_PATH);
       });
-      callback(oAuth2Client);
+     // callback(oAuth2Client);
     });
   });
 }
@@ -75,7 +107,7 @@ function listMajors(auth) {
   const sheets = google.sheets({version: 'v4', auth});
   sheets.spreadsheets.values.get({
     spreadsheetId: '1y9FppevCNxkPPtJb9lkOfbYnIoMjFlt1Er4OLhsXY1g',
-    range: 'A2:E',
+    range: 'A1:E',
   }, (err, res) => {
     if (err) return console.log('The API returned an error: ' + err);
     const rows = res.data.values;
@@ -115,41 +147,74 @@ var users = ["10228272", "155659213", "783214"];
 
 var stream = T.stream('statuses/filter', {track: '#screenshotsaturday,#indiedev,#gamedev,#meetthedev'});
 
+// func - is this user in my spreadsheet already?
 
 stream.on('tweet', function (tweet) {
     // if (users.indexOf(tweet.user.id_str) > -1) {
         // console.log(tweet.user.name + ": " + tweet.text);
-        console.log(tweet.user.name);
+        
         // T.post('statuses/retweet/:id', { id: tweet.id_str }, function (err, data, response) {
         //     console.log(data)
         // })
     // }
+    // every time someone is added or removed from the special list, update the sheet
+    T.get('lists/members', { owner_id: '33581319', slug: 'DailyInspiration', count: 5000 }, function(err, reply) {
+        if(err) { console.log(err); } //else { console.log('test'); }
 
+        // T.get('lists/show', { owner_id: '33581319', slug: 'DailyInspiration' }, function(err, reply2) {
+        //     if(err) { return callback(err); }
 
-    let values = [
-        [
-            [tweet.user.name, tweet.user.client_id]
-        ],
-    ];
-    let resource = {
-        values,
-    };
+        // reply.forEach(function(value){
+            var members = reply.users
+        //   });
+    // console.log(randIndex(members))
+            console.log(members.length) ;
+        //   for (let i = 0; i < members.length; i++)
+        //   {
+        //     console.log(members[i].name);//id_str);
+        //     // console.log('test');
+        //   }
+          process.exit(); // TODO THERE IS ACTUALLY AN API REQUEST TO QUERY IF A USER IS IN A LIST lists/mebers/show
+        })
+// what I should really do it get this bot to keep the special list and a spreadsheet up to date, so I dont' query the Api too much
 
+        let values = [
+            [tweet.user.id_str, tweet.user.name, getDateTime(), 1]
+        ];
 
-    const sheets = google.sheets({version: 'v4', TOKEN_PATH});
+        let resource = {
+            values,
+        };
+
+        // listMajors(oAuth2Client);
+        const sheets = google.sheets({version: 'v4', oAuth2Client});
+        
         sheets.spreadsheets.values.append({
+        auth: oAuth2Client,
         spreadsheetId: '1y9FppevCNxkPPtJb9lkOfbYnIoMjFlt1Er4OLhsXY1g',
         range: 'A2:C',
         valueInputOption: 'RAW',
-        majorDimension: 'ROWS',
+        // majorDimension: 'ROWS',
         resource,
     }, (err, result) => {
         if (err) {
         // Handle error.
         console.log(err);
         } else {
-        console.log(`${result.updates.updatedCells} cells appended.`);
+        // console.log(tweet.user.name);
+        
+        
+
+        // T.post('friendships/create', { id: tweet.user.id_str });//, callback);
+        // console.log(`${result.data.updates.updatedCells} friendship created and logged`);
         }
     });
-    // }
+
+// }
 })
+
+function randIndex (arr) {
+    var index = Math.floor(arr.length*Math.random());
+    return arr[index];
+  };
+  
